@@ -11,6 +11,19 @@ translates and routes to real Postgres. Run it indefinitely as a permanent compa
 (e.g. legacy MongoDB driver code not worth rewriting), or as a temporary cutover bridge while a
 migration tool moves schema/data behind the scenes.
 
+## Architecture
+
+Every protocol frontend feeds the same shared statement pipeline — firewall, routing, QoS,
+dialect translation, caching, and stats are protocol-agnostic. Config lives in Postgres itself
+(`polywire_config`, `polywire_firewall_rules`), hot-reloaded to every running process via
+`LISTEN/NOTIFY` — no restart to change a firewall rule or add a backend.
+
+![PolyWire architecture — every protocol frontend feeds one shared statement pipeline, config-driven from Postgres](docs/architecture.png)
+
+The full architecture, security, HA, and deployment guide with more diagrams lives at
+[`polywire/index.html`](https://polygres26.github.io/polywire/) (or open it directly:
+[polywire/index.html](https://github.com/polygres26/polygres26.github.io/blob/main/polywire/index.html)).
+
 ## Quick start
 
 ```bash
