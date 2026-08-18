@@ -1,0 +1,5 @@
+package com.polygres.wire.core;
+
+public enum SourceDialect {
+    ORACLE, POSTGRES, MYSQL, SNOWFLAKE, REDSHIFT, BIGQUERY, DATABRICKS, SQL_SERVER, GENERIC_REST, NL, POLYWIRE_NATIVE
+}
