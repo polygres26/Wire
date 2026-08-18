@@ -13,12 +13,13 @@ migration tool moves schema/data behind the scenes.
 
 ## Architecture
 
-Every protocol frontend feeds the same shared statement pipeline — firewall, routing, QoS,
-dialect translation, caching, and stats are protocol-agnostic. Config lives in Postgres itself
-(`polywire_config`, `polywire_firewall_rules`), hot-reloaded to every running process via
-`LISTEN/NOTIFY` — no restart to change a firewall rule or add a backend.
+Every protocol frontend feeds the same 9-stage pipeline: frontends → firewall → router → QoS
+admission control → dialect translation → rollup → cache → stats collection → backend
+execution. Config lives in Postgres itself (`polywire_config`, `polywire_firewall_rules`),
+hot-reloaded to every running process via `LISTEN/NOTIFY` — no restart to change a firewall
+rule, routing topology, or SQL rewrite rule.
 
-![PolyWire architecture — every protocol frontend feeds one shared statement pipeline, config-driven from Postgres](docs/architecture.png)
+![PolyWire architecture: eight client protocols feed a shared nine-stage pipeline (frontends, firewall, router, QoS, dialect translation, rollup, cache, stats, backend execution), driven by a Postgres control plane over LISTEN/NOTIFY, executing against horizontally-sharded Postgres backends](docs/architecture.png)
 
 The full architecture, security, HA, and deployment guide with more diagrams lives at
 [`polywire/index.html`](https://polygres26.github.io/polywire/) (or open it directly:
