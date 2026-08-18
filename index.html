@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PolyWire — Use Case &amp; Deployment Guide</title>
+<meta name="description" content="Architecture, security, HA, cloud, laptop, and Docker guide for PolyWire, a multi-protocol Postgres wire gateway.">
+<style>
+  :root {
+    --bg: #faf8fc;
+    --bg-elevated: #ffffff;
+    --text: #201a29;
+    --text-muted: #5b5468;
+    --border: #e3dcee;
+    --primary: #7c5aa6;
+    --primary-tint: #f0e9f7;
+    --secondary: #d97a5f;
+    --secondary-tint: #fde9e4;
+    --tertiary-tint: #e2f3ef;
+    --code-bg: #f1ebf8;
+    --shadow: 0 1px 2px rgba(60, 40, 90, 0.06), 0 8px 24px rgba(60, 40, 90, 0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1420;
+      --bg-elevated: #221b2b;
+      --text: #ede8f2;
+      --text-muted: #a99fb8;
+      --border: #3a3049;
+      --primary: #b593dd;
+      --primary-tint: #2c2338;
+      --secondary: #e79a7f;
+      --secondary-tint: #332420;
+      --tertiary-tint: #1e2f2a;
+      --code-bg: #2a2233;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.65;
+  }
+  a { color: var(--primary); }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px 96px; }
+
+  header.hero {
+    background: linear-gradient(160deg, var(--primary-tint), var(--bg) 70%);
+    border-bottom: 1px solid var(--border);
+    padding: 64px 24px 40px;
+  }
+  header.hero .wrap { padding: 0; }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    font-size: .72rem;
+    font-weight: 700;
+    color: var(--primary);
+  }
+  h1 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", ui-serif, serif;
+    font-size: clamp(2rem, 4.5vw, 2.9rem);
+    line-height: 1.1;
+    margin: .5rem 0 1rem;
+    text-wrap: balance;
+  }
+  .lede { font-size: 1.08rem; color: var(--text-muted); max-width: 68ch; }
+  .callout {
+    margin-top: 1.5rem;
+    padding: 14px 18px;
+    border-left: 3px solid var(--secondary);
+    background: var(--secondary-tint);
+    border-radius: 0 8px 8px 0;
+    font-size: .95rem;
+  }
+
+  nav.toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 6px;
+    margin: 28px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  nav.toc a {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text);
+    text-decoration: none;
+    font-size: .82rem;
+    white-space: nowrap;
+  }
+  nav.toc a:hover { border-color: var(--primary); color: var(--primary); }
+
+  section { padding: 44px 0; border-bottom: 1px solid var(--border); }
+  section:last-of-type { border-bottom: none; }
+  h2 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", ui-serif, serif;
+    font-size: 1.6rem;
+    margin: 0 0 .3em;
+    scroll-margin-top: 20px;
+  }
+  h3 {
+    font-size: 1.15rem;
+    margin: 2em 0 .6em;
+    scroll-margin-top: 20px;
+    color: var(--primary);
+  }
+  .section-num {
+    display: inline-block;
+    color: var(--primary);
+    font-variant-numeric: tabular-nums;
+    margin-right: .3em;
+  }
+  p { margin: 0 0 1em; }
+  ul, ol { padding-left: 1.3em; }
+  li { margin-bottom: .5em; }
+  code {
+    background: var(--code-bg);
+    padding: .15em .4em;
+    border-radius: 5px;
+    font-size: .88em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: 16px 18px;
+    border-radius: 10px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; font-size: .85rem; }
+
+  .table-wrap { overflow-x: auto; margin: 1.2em 0; border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; background: var(--bg-elevated); }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--primary-tint); font-weight: 700; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+
+  .diagram {
+    margin: 1.4em 0;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  .diagram .mermaid { display: flex; justify-content: center; }
+  .diagram figcaption {
+    margin-top: 10px;
+    font-size: .82rem;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  .badge-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 1.2em 0; }
+  .badge {
+    background: var(--tertiary-tint);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: .82rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  footer {
+    text-align: center;
+    padding: 40px 24px 80px;
+    color: var(--text-muted);
+    font-size: .85rem;
+  }
+  footer a { color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">github.com/polygres26/Wire</div>
+    <h1>PolyWire<br>Use Case &amp; Deployment Guide</h1>
+    <p class="lede">
+      A mid-tier, Postgres-only database gateway. It speaks Oracle TNS/TTC, MySQL client/server
+      protocol, SQL Server TDS, Postgres wire protocol v3, MongoDB wire protocol, DynamoDB's
+      HTTP/JSON API, gRPC, and MCP to clients — translating and routing every one of them to real
+      Postgres backend(s). Wire-protocol compatibility for a pre- or post-migration cutover, not a
+      schema/data migration tool itself.
+    </p>
+    <nav class="toc">
+      <a href="#answers">1. What it answers</a>
+      <a href="#architecture">2. Architecture</a>
+      <a href="#security">3. Security</a>
+      <a href="#ha">4. High Availability</a>
+      <a href="#laptop">5. Laptop</a>
+      <a href="#cloud">6. Cloud</a>
+      <a href="#docker">7. Docker</a>
+      <a href="#features">8. Features</a>
+      <a href="#matrix">9. Use cases</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section id="answers">
+  <h2><span class="section-num">1</span>What question it answers</h2>
+  <p>
+    <strong>"Can my existing app, written against an Oracle/MySQL/SQL Server/MongoDB/DynamoDB
+    driver, talk to Postgres without a rewrite?"</strong> — yes: point the app's connection string
+    at PolyWire instead of its original database, and PolyWire translates and routes to real
+    Postgres.
+  </p>
+  <p>
+    Run it indefinitely as a permanent compatibility shim (e.g. legacy MongoDB driver code that's
+    not worth rewriting), or as a temporary cutover bridge while a migration tool moves schema/data
+    behind the scenes.
+  </p>
+</section>
+
+<section id="architecture">
+  <h2><span class="section-num">2</span>Architecture</h2>
+
+  <figure class="diagram">
+    <pre class="mermaid">
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#f0e9f7','primaryTextColor':'#2c1f3d','primaryBorderColor':'#7c5aa6','lineColor':'#7c5aa6','secondaryColor':'#fde9e4','secondaryTextColor':'#2c1f3d','tertiaryColor':'#e2f3ef','tertiaryTextColor':'#2c1f3d','noteBkgColor':'#fde9e4','noteTextColor':'#2c1f3d','noteBorderColor':'#d97a5f','fontSize':'16px','fontFamily':'-apple-system, Helvetica, Arial, sans-serif'}}}%%
+flowchart TB
+    subgraph Clients["Existing client drivers — unmodified"]
+        OraCli["Oracle TNS/TTC\nclient (JDBC OCI etc.)"]
+        MyCli["MySQL client/\nserver protocol"]
+        MsCli["SQL Server\nTDS (JDBC)"]
+        PgCli["Postgres wire v3\n(psql, JDBC, etc.)"]
+        MongoCli["MongoDB wire\nprotocol"]
+        DdbCli["DynamoDB\nHTTP/JSON API"]
+        GrpcCli["gRPC"]
+        McpCli["MCP client\n(AI agent tools)"]
+    end
+
+    subgraph PolyWire["PolyWire process — one shared pipeline"]
+        direction TB
+        FE["Frontends\norawire:1521/2484 · mywire:3306\nmssqlwire:1433 · pgwire:5432\nmongowire:27017 · dynamowire:8000\ngRPC:7070/17071 · MCP:8010"]
+        FW["FirewallStage\n(policy from Postgres)"]
+        RT["RouterStage\n(shard/backend selection)"]
+        QOS["QosControlStage\n(admission control)"]
+        DT["DialectTranslationStage\n(SQL rewrite per protocol)"]
+        RU["RollupStage"]
+        CA["CacheStage"]
+        ST["StatsCollectorStage"]
+        FE --> FW --> RT --> QOS --> DT --> RU --> CA --> ST
+    end
+
+    Cfg[("polywire_config /\npolywire_firewall_rules\n(control-plane Postgres)")]
+    PG1[("Postgres shard 1")]
+    PG2[("Postgres shard 2 / N")]
+
+    OraCli & MyCli & MsCli & PgCli & MongoCli & DdbCli & GrpcCli & McpCli --> FE
+    ST -->|SQL| PG1
+    ST -->|SQL| PG2
+    Cfg -.LISTEN/NOTIFY\nhot reload.-> FW
+    Cfg -.LISTEN/NOTIFY.-> RT
+    </pre>
+    <figcaption>Every protocol frontend feeds the same shared statement pipeline.</figcaption>
+  </figure>
+
+  <ul>
+    <li><strong>One pipeline, many faces</strong>: every frontend (Oracle, MySQL, SQL Server, Mongo,
+      DynamoDB, gRPC, MCP, native Postgres) feeds the same <code>StatementPipeline</code> instance —
+      firewall, routing, QoS, translation, caching, and stats are protocol-agnostic.</li>
+    <li><strong>Config lives in Postgres, not just env vars</strong>: <code>polywire_config</code>
+      (versioned, insert-only) and <code>polywire_firewall_rules</code> (mutable, DBA-managed) are
+      real tables in a designated "config-primary" Postgres. <code>LISTEN/NOTIFY</code> pushes
+      changes to every running PolyWire process within milliseconds — no restart to change a
+      firewall rule or add a backend.</li>
+    <li><strong>Config-primary vs. data plane</strong>: the <code>POLYWIRE_PG_*</code> env vars
+      point at the single Postgres that holds control-plane tables. <code>POLYWIRE_BACKENDS</code>
+      / <code>POLYWIRE_SHARD_BACKENDS</code> are the separate, explicitly-registered data-plane
+      shard targets actual queries are routed to — the config-primary is never automatically one of
+      the shards.</li>
+  </ul>
+</section>
+
+<section id="security">
+  <h2><span class="section-num">3</span>Security</h2>
+
+  <h3>3.1 ACL (IP / CIDR allowlisting) &amp; PPv2 / X-Forwarded-For</h3>
+  <figure class="diagram">
+    <pre class="mermaid">
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#f0e9f7','primaryTextColor':'#2c1f3d','primaryBorderColor':'#7c5aa6','lineColor':'#7c5aa6','secondaryColor':'#fde9e4','secondaryTextColor':'#2c1f3d','tertiaryColor':'#e2f3ef','tertiaryTextColor':'#2c1f3d','noteBkgColor':'#fde9e4','noteTextColor':'#2c1f3d','noteBorderColor':'#d97a5f','fontSize':'16px','fontFamily':'-apple-system, Helvetica, Arial, sans-serif'}}}%%
+flowchart LR
+    Raw["Raw TCP peer\n(could be a load balancer)"] --> PPv2{"PPv2 header present\nAND peer is a\ntrusted proxy?"}
+    PPv2 -->|yes| RealIP["Use the real client IP\ncarried inside PPv2/XFF"]
+    PPv2 -->|no| PeerIP["Use the raw TCP\npeer IP as-is"]
+    RealIP --> Gate["ClientAcl\nallow/deny by IP or CIDR"]
+    PeerIP --> Gate
+    Gate -->|allowed| Pipeline["StatementPipeline"]
+    Gate -->|denied| Drop["Connection dropped,\nlogged"]
+    </pre>
+    <figcaption>PPv2/XFF trust is opt-in per proxy, never global.</figcaption>
+  </figure>
+
+  <p><strong>ACL (<code>ClientAcl</code>)</strong> — a plain, ordered allow/deny rule list evaluated
+  per inbound connection, on every frontend (pgwire, mywire, orawire, mssqlwire, mongowire, gRPC,
+  dynamowire, MCP, admin/metrics HTTP):</p>
+  <ul>
+    <li>Rule grammar: <code>allow &lt;ip-or-cidr&gt;</code> / <code>deny &lt;ip-or-cidr&gt;</code>,
+      one per line/<code>;</code>-separated entry — e.g.
+      <code>allow 10.0.0.0/8; allow 192.168.1.50; deny 0.0.0.0/0</code> (allow the private ranges
+      you name, deny everything else).</li>
+    <li>Sourced from either the env var (<code>POLYWIRE_ACL_RULES</code>) or
+      <code>polywire_config.aclRules</code> — same dual-source convention as every other setting;
+      the DB-stored version hot-reloads via <code>LISTEN/NOTIFY</code> with zero restart.</li>
+    <li>Default (unset) is fully open — no behavior change until you opt in.</li>
+    <li>A rejected connection is dropped immediately, before it reaches the firewall/router stages,
+      and logged with the offending IP — visible in PolyWire's own logs for audit.</li>
+  </ul>
+
+  <p><strong>PPv2 (PROXY protocol v2) / <code>X-Forwarded-For</code></strong> — solves the problem
+  that, once you put a load balancer or connection pooler in front of PolyWire, every connection's
+  raw TCP peer IP is the load balancer, not the real client — so a naive ACL would only ever see
+  one IP.</p>
+  <ul>
+    <li><code>POLYWIRE_ACL_PPV2_ENABLED</code> (or <code>polywire_config.aclPpv2Enabled</code>)
+      turns on parsing of the PPv2 header (binary, used by TCP-level proxies — HAProxy, many cloud
+      NLBs) or the <code>X-Forwarded-For</code> HTTP header to recover the real client IP.</li>
+    <li><strong>Trust is opt-in per proxy, not global</strong>:
+      <code>POLYWIRE_ACL_TRUSTED_PROXIES</code> is a separate IP/CIDR list — the forwarded-IP
+      header is only honored when the direct TCP peer is itself in this list. Without this check,
+      any client could forge its own <code>X-Forwarded-For</code> header and impersonate an
+      allowlisted IP.</li>
+    <li>Typical setup: <code>POLYWIRE_ACL_TRUSTED_PROXIES=10.0.0.0/24</code> (your load balancer's
+      subnet), <code>POLYWIRE_ACL_RULES=allow 203.0.113.0/24</code> (the real range you want to
+      allow).</li>
+  </ul>
+
+  <h3>3.2 Backend-poisoning protection</h3>
+  <p>Because <code>POLYWIRE_BACKENDS</code> can be set via the DB-writable
+  <code>polywire_config</code> table, anyone with write access to that table could otherwise
+  register an arbitrary host and have real client traffic silently routed to it (a config-driven
+  SSRF). <code>TrustedBackendHosts</code> (<code>POLYWIRE_TRUSTED_BACKEND_HOSTS</code>) closes
+  this:</p>
+
+  <figure class="diagram">
+    <pre class="mermaid">
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#f0e9f7','primaryTextColor':'#2c1f3d','primaryBorderColor':'#7c5aa6','lineColor':'#7c5aa6','secondaryColor':'#fde9e4','secondaryTextColor':'#2c1f3d','tertiaryColor':'#e2f3ef','tertiaryTextColor':'#2c1f3d','noteBkgColor':'#fde9e4','noteTextColor':'#2c1f3d','noteBorderColor':'#d97a5f','fontSize':'16px','fontFamily':'-apple-system, Helvetica, Arial, sans-serif'}}}%%
+flowchart TB
+    Cfg["polywire_config.backends\n(DB-writable)"] --> Check{"Host in\nPOLYWIRE_TRUSTED_BACKEND_HOSTS?\n(env var only)"}
+    Check -->|yes| Register["Registered — routable"]
+    Check -->|no| Reject["Refused, logged,\nrest of config unaffected"]
+    </pre>
+    <figcaption>Env-var only, never itself in polywire_config — closes the circularity.</figcaption>
+  </figure>
+
+  <p>Deliberately <strong>env-var only, never itself in <code>polywire_config</code></strong> — if
+  the allowlist lived in the same DB-writable surface it gates, the protection would be circular.
+  Entries accept IPs, CIDR blocks, or literal hostnames (docker-compose service names, internal
+  DNS).</p>
+
+  <h3>3.3 SQL Firewall</h3>
+  <p>Runs as its own pipeline stage (<code>FirewallStage</code>), first in line — every statement on
+  every frontend is checked before routing, translation, or execution. Rules live in a real,
+  DBA-managed Postgres table, not an env var or app config file, so a DBA can change policy with an
+  <code>UPDATE</code>/<code>INSERT</code> statement and see it apply in milliseconds, no PolyWire
+  redeploy.</p>
+
+  <figure class="diagram">
+    <pre class="mermaid">
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#f0e9f7','primaryTextColor':'#2c1f3d','primaryBorderColor':'#7c5aa6','lineColor':'#7c5aa6','secondaryColor':'#fde9e4','secondaryTextColor':'#2c1f3d','tertiaryColor':'#e2f3ef','tertiaryTextColor':'#2c1f3d','noteBkgColor':'#fde9e4','noteTextColor':'#2c1f3d','noteBorderColor':'#d97a5f','fontSize':'16px','fontFamily':'-apple-system, Helvetica, Arial, sans-serif'}}}%%
+flowchart LR
+    Stmt["Incoming statement\n(any protocol)"] --> Match["Match rules in\npriority order"]
+    Match -->|first ALLOW match| Pass["Forwarded to\nRouterStage"]
+    Match -->|first DENY match| Block["Rejected —\nprotocol-native error\nreturned to client"]
+    Match -->|no rule matches| Default["Fail open or closed\n(deployment choice)"]
+    DBA["DBA: INSERT/UPDATE\npolywire_firewall_rules"] -.LISTEN/NOTIFY,\nno restart.-> Match
+    </pre>
+    <figcaption>SQL Firewall: the first pipeline stage, DBA-managed via a real Postgres table.</figcaption>
+  </figure>
+
+  <p><strong>Table schema</strong> (<code>polywire_firewall_rules</code>, auto-created, own
+  <code>LISTEN/NOTIFY</code> trigger):</p>
+  <div class="table-wrap"><table>
+    <tr><th>column</th><th>meaning</th></tr>
+    <tr><td><code>id</code></td><td>primary key</td></tr>
+    <tr><td><code>priority</code></td><td>lower evaluates first; first matching rule wins</td></tr>
+    <tr><td><code>action</code></td><td><code>ALLOW</code> or <code>DENY</code></td></tr>
+    <tr><td><code>statement_type</code></td><td><code>SELECT</code> / <code>INSERT</code> / <code>UPDATE</code> / <code>DELETE</code> / <code>DDL</code> / <code>*</code> (any)</td></tr>
+    <tr><td><code>table_pattern</code></td><td>glob against the target table, schema-qualification optional (<code>orders</code> matches both <code>orders</code> and <code>public.orders</code>)</td></tr>
+    <tr><td><code>sql_pattern</code></td><td>optional raw regex escape hatch — matched against the full SQL text when a table-level rule isn't expressive enough</td></tr>
+    <tr><td><code>enabled</code></td><td>boolean — disable a rule without deleting it</td></tr>
+    <tr><td><code>description</code></td><td>free text, shows up in denial logs</td></tr>
+  </table></div>
+
+  <p><strong>Example policy:</strong></p>
+  <div class="table-wrap"><table>
+    <tr><th>priority</th><th>action</th><th>statement_type</th><th>table_pattern</th><th>description</th></tr>
+    <tr><td>10</td><td>DENY</td><td>DELETE</td><td><code>*orders*</code></td><td>block bulk order deletes from any app</td></tr>
+    <tr><td>20</td><td>DENY</td><td><code>*</code></td><td><code>*pii_*</code></td><td>block all access (read or write) to PII-prefixed tables</td></tr>
+    <tr><td>30</td><td>DENY</td><td><code>*</code></td><td><code>*</code> (sql_pattern: <code>(?i)DROP\s+TABLE</code>)</td><td>block DDL drops regardless of table name</td></tr>
+    <tr><td>100</td><td>ALLOW</td><td><code>*</code></td><td><code>*</code></td><td>default allow — everything not matched above</td></tr>
+  </table></div>
+
+  <p><strong>Config surface</strong> — configured, like every other feature, from either a plain SQL
+  <code>INSERT INTO polywire_firewall_rules (...)</code> (the intended day-to-day DBA path — no
+  application deploy involved at all), or the equivalent Postgres stored procedure PolyWire ships,
+  for teams that prefer calling a procedure over hand-writing DML.</p>
+
+  <h3>3.4 Authentication</h3>
+  <figure class="diagram">
+    <pre class="mermaid">
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#f0e9f7','primaryTextColor':'#2c1f3d','primaryBorderColor':'#7c5aa6','lineColor':'#7c5aa6','secondaryColor':'#fde9e4','secondaryTextColor':'#2c1f3d','tertiaryColor':'#e2f3ef','tertiaryTextColor':'#2c1f3d','noteBkgColor':'#fde9e4','noteTextColor':'#2c1f3d','noteBorderColor':'#d97a5f','fontSize':'16px','fontFamily':'-apple-system, Helvetica, Arial, sans-serif'}}}%%
+flowchart LR
+    subgraph HTTP["HTTP/gRPC/MCP frontends"]
+        Bearer["Bearer JWT"] --> OIDC["AccessContextResolver\nOAuth2/OIDC\n(Okta, EntraID, generic OIDC)\nJWKS discovery + caching"]
+    end
+    subgraph TCP["TCP protocol frontends\n(Oracle/MySQL/SQL Server/Postgres wire)"]
+        PW["Password / driver-native auth"]
+    end
+    subgraph Dynamo["dynamowire (HTTP)"]
+        SigV4["AWS SigV4 request\nsignature verification"]
+    end
+    OIDC --> Ctx["AccessContext\n(sub, roles)"]
+    SigV4 --> Ctx
+    Ctx --> Pipeline["Firewall / routing decisions\ncan use roles"]
+    </pre>
+    <figcaption>Three parallel auth paths feeding one AccessContext.</figcaption>
+  </figure>
+  <ul>
+    <li>OAuth2/OIDC bearer-token validation for every HTTP-based frontend (gRPC, MCP, admin API),
+      with configurable claim mapping (<code>sub</code> → user id, custom claim → roles).</li>
+    <li>AWS Signature v4 verification for <code>dynamowire</code>, opt-in via
+      <code>POLYWIRE_AWS_IAM_CREDENTIALS</code>.</li>
+    <li>TCP wire-protocol frontends (Oracle/MySQL/SQL Server/Postgres) authenticate with the client
+      driver's own native password exchange, passed through to the real Postgres backend.</li>
+  </ul>
+
+  <h3>3.5 TLS</h3>
+  <ul>
+    <li><code>orawire</code> has a dedicated TLS listener (TCPS, port 2484) alongside plaintext TNS
+      (1521).</li>
+    <li>gRPC has a dedicated TLS listener (17071) alongside plaintext (7070).</li>
+    <li>All built from one shared keystore — one cert to rotate, not one per frontend.</li>
+  </ul>
+</section>
+
+<section id="ha">
+  <h2><span class="section-num">4</span>High Availability</h2>
+
+  <h3>4.1 Config-primary failover</h3>
+  <figure class="diagram">
+    <pre class="mermaid">
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#f0e9f7','primaryTextColor':'#2c1f3d','primaryBorderColor':'#7c5aa6','lineColor':'#7c5aa6','secondaryColor':'#fde9e4','secondaryTextColor':'#2c1f3d','tertiaryColor':'#e2f3ef','tertiaryTextColor':'#2c1f3d','noteBkgColor':'#fde9e4','noteTextColor':'#2c1f3d','noteBorderColor':'#d97a5f','fontSize':'16px','fontFamily':'-apple-system, Helvetica, Arial, sans-serif'}}}%%
+sequenceDiagram
+    participant PW as PolyWire process
+    participant P as Primary Postgres
+    participant S as Standby Postgres
+
+    PW->>P: query (normal operation)
+    P-->>PW: result
+    Note over P: Primary goes down
+    PW->>P: query attempt
+    P--xPW: connection refused
+    PW->>S: failover — retry on standby
+    S-->>PW: result
+    Note over PW: onStandby=true, background probe checks primary every POLYWIRE_PG_FAILBACK_CHECK_SECONDS
+    loop every N seconds
+        PW->>P: probe
+    end
+    Note over P: Primary recovers
+    PW->>P: probe succeeds
+    Note over PW: onStandby=false — failback, new queries go to primary again
+    </pre>
+    <figcaption>Automatic failover and failback for the config-primary Postgres.</figcaption>
+  </figure>
+  <ul>
+    <li>Configured via <code>POLYWIRE_PG_STANDBY_HOST</code>/<code>POLYWIRE_PG_STANDBY_PORT</code>.
+      Applies to both the control-plane connection and the query-execution path for the synthetic
+      default backend.</li>
+    <li>Explicitly-named shard backends (<code>POLYWIRE_BACKENDS</code>) do <strong>not</strong> get
+      automatic failover — a named shard isn't presumed to be a replica pair of another named shard;
+      pair them yourself at the infrastructure layer if needed.</li>
+    <li>Failback is automatic, probed in the background
+      (<code>POLYWIRE_PG_FAILBACK_CHECK_SECONDS</code>, default 10s) — no manual intervention once
+      the primary recovers.</li>
+  </ul>
+
+  <h3>4.2 Sharding / scatter-gather</h3>
+  <p><code>POLYWIRE_SHARD_BACKENDS</code> names a subset of the registered backends as a shard
+  group; <code>RoutingBackendExecutor</code> fans a matching query out to all of them and merges
+  results — useful for read-side aggregate queries across horizontally-partitioned Postgres
+  backends.</p>
+
+  <h3>4.3 What HA does not cover yet</h3>
+  <p>Cross-AZ distributed cache (Ignite) placement is verified locally (2-node) but not yet
+  cloud-native — AZ-aware backup placement, cloud discovery (not static IP lists), and TLS between
+  cache nodes are open follow-up work before a real multi-AZ production deploy. Treat single-AZ or
+  single-host as the currently-proven HA envelope.</p>
+</section>
+
+<section id="laptop">
+  <h2><span class="section-num">5</span>Deploying on a laptop</h2>
+  <p>Fastest path — no cloud account, no Kubernetes required for a full local smoke test:</p>
+  <pre><code>docker compose -f docker/polywire/docker-compose.yml up --build</code></pre>
+  <p>Run from the repo root — the build context is the repo root even though the Dockerfile lives
+  under <code>docker/polywire/</code>. Bring your own Postgres, or point <code>POLYWIRE_PG_*</code>
+  at one running elsewhere.</p>
+  <p>For iterative Java development without Docker:</p>
+  <pre><code>cd wire && mvn package -DskipTests && scripts/run.sh</code></pre>
+</section>
+
+<section id="cloud">
+  <h2><span class="section-num">6</span>Cloud deployment</h2>
+  <figure class="diagram">
+    <pre class="mermaid">
+%%{init: {'theme':'base', 'themeVariables': {'primaryColor':'#f0e9f7','primaryTextColor':'#2c1f3d','primaryBorderColor':'#7c5aa6','lineColor':'#7c5aa6','secondaryColor':'#fde9e4','secondaryTextColor':'#2c1f3d','tertiaryColor':'#e2f3ef','tertiaryTextColor':'#2c1f3d','noteBkgColor':'#fde9e4','noteTextColor':'#2c1f3d','noteBorderColor':'#d97a5f','fontSize':'16px','fontFamily':'-apple-system, Helvetica, Arial, sans-serif'}}}%%
+flowchart TB
+    subgraph LB["Load balancer / ingress"]
+        L1["TCP LB\n(orawire/mywire/mssqlwire/pgwire/mongowire\nports — protocol-aware health checks)"]
+        L2["HTTP(S) LB\n(dynamowire / gRPC / MCP / admin)"]
+    end
+    subgraph Cluster["PolyWire replica set\n(stateless — safe to scale horizontally)"]
+        N1["PolyWire pod 1"]
+        N2["PolyWire pod 2"]
+        N3["PolyWire pod N"]
+    end
+    subgraph DataPlane["Data plane"]
+        Primary[("Config-primary Postgres\n+ standby")]
+        Shard1[("Shard 1")]
+        Shard2[("Shard N")]
+    end
+    IdP["OIDC provider\n(Okta / EntraID / etc.)"]
+    IAM["Cloud IAM\n(AWS SigV4)"]
+
+    Clients["Client applications"] --> L1 & L2 --> N1 & N2 & N3
+    N1 & N2 & N3 --> Primary
+    N1 & N2 & N3 --> Shard1
+    N1 & N2 & N3 --> Shard2
+    N1 & N2 & N3 -.token validation.-> IdP
+    N1 & N2 & N3 -.sig verify.-> IAM
+    </pre>
+    <figcaption>A stateless replica set behind protocol-aware load balancers.</figcaption>
+  </figure>
+  <ul>
+    <li><strong>PolyWire itself is stateless</strong> — every pod reads its live config from the
+      same config-primary Postgres via <code>LISTEN/NOTIFY</code>, so horizontal scaling is just
+      "add more pods pointed at the same <code>POLYWIRE_PG_*</code>."</li>
+    <li><code>POLYWIRE_TRUSTED_BACKEND_HOSTS</code> must be set at deploy time (env var / secret /
+      Kubernetes <code>NetworkPolicy</code>-equivalent) — infrastructure config, not something to
+      put in application config management that developers can edit.</li>
+    <li><strong>Container image</strong>: build with <code>docker/polywire/Dockerfile</code>, push
+      to a registry, deploy via your platform's normal rolling update mechanism.</li>
+    <li><strong>Secrets</strong>: <code>POLYWIRE_PG_PASSWORD</code>,
+      <code>POLYWIRE_AWS_IAM_CREDENTIALS</code>, OAuth client secrets belong in your cloud's secret
+      manager or a Kubernetes <code>Secret</code>, injected as env vars — never baked into the
+      image.</li>
+    <li><strong>Cloud-agnostic by design</strong> — PolyWire only needs TCP reachability to its
+      Postgres backends and, optionally, an OIDC issuer and/or AWS IAM for auth.</li>
+  </ul>
+</section>
+
+<section id="docker">
+  <h2><span class="section-num">7</span>Docker packaging reference</h2>
+  <div class="table-wrap"><table>
+    <tr><th></th><th>Detail</th></tr>
+    <tr><td>Image</td><td>1 — <code>docker/polywire/Dockerfile</code></td></tr>
+    <tr><td>Base (build)</td><td><code>maven:3.9-eclipse-temurin-21</code></td></tr>
+    <tr><td>Base (runtime)</td><td><code>eclipse-temurin:21-jre-jammy</code></td></tr>
+    <tr><td>Published ports</td><td>15432 (pgwire), 13306 (mywire), 11521/2484 (orawire plaintext/TLS), 14333 (mssqlwire), 27017 (mongowire), 7070/17071 (gRPC plaintext/TLS), 18000 (dynamowire), 18010 (MCP), 19090 (admin/metrics)</td></tr>
+    <tr><td>Persistent state</td><td>none in the image — all state lives in the external config-primary Postgres</td></tr>
+  </table></div>
+  <p>Build standalone (no compose):</p>
+  <pre><code>docker build -t polywire:latest polywire/</code></pre>
+  <p>Full packaging source: <a href="https://github.com/polygres26/Docker" target="_blank" rel="noopener">github.com/polygres26/Docker</a>.</p>
+</section>
+
+<section id="features">
+  <h2><span class="section-num">8</span>Complete feature reference</h2>
+
+  <h3>8.1 Protocol frontends</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Frontend</th><th>Protocol</th><th>Default port</th><th>Notes</th></tr>
+    <tr><td>pgwire</td><td>Postgres wire protocol v3</td><td>15432</td><td>native passthrough, no translation needed</td></tr>
+    <tr><td>mywire</td><td>MySQL client/server protocol</td><td>13306</td><td>SQL dialect translated to Postgres</td></tr>
+    <tr><td>orawire</td><td>Oracle TNS/TTC</td><td>11521 / 2484</td><td>SQL dialect translated; plaintext and TLS listeners run together</td></tr>
+    <tr><td>mssqlwire</td><td>SQL Server TDS</td><td>14333</td><td>T-SQL dialect translated</td></tr>
+    <tr><td>mongowire</td><td>MongoDB wire protocol</td><td>27017</td><td>document ops mapped to SQL</td></tr>
+    <tr><td>dynamowire</td><td>DynamoDB HTTP/JSON API</td><td>18000</td><td>AWS SigV4-verifiable, item ops mapped to SQL</td></tr>
+    <tr><td>gRPC</td><td>gRPC</td><td>7070 / 17071</td><td>both listeners run together, one shared keystore</td></tr>
+    <tr><td>MCP</td><td>JSON-RPC 2.0 over Streamable HTTP</td><td>18010</td><td>see §8.5</td></tr>
+    <tr><td>Admin / metrics</td><td>HTTP</td><td>19090</td><td>health, metrics, read-only config introspection</td></tr>
+  </table></div>
+
+  <h3>8.2 Statement pipeline stages</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Stage</th><th>Feature</th></tr>
+    <tr><td><code>FirewallStage</code></td><td>SQL Firewall — §3.3</td></tr>
+    <tr><td><code>RouterStage</code></td><td>Backend/shard selection per statement</td></tr>
+    <tr><td><code>QosControlStage</code></td><td>Admission control — caps in-flight work per backend</td></tr>
+    <tr><td><code>DialectTranslationStage</code></td><td>Rewrites source-dialect SQL into Postgres SQL</td></tr>
+    <tr><td><code>RollupStage</code></td><td>Aggregates/merges results for scatter-gather queries</td></tr>
+    <tr><td><code>CacheStage</code></td><td>Translation-result and read caching</td></tr>
+    <tr><td><code>StatsCollectorStage</code></td><td>Per-statement metrics feeding the admin/metrics endpoint</td></tr>
+  </table></div>
+
+  <h3>8.3 Security features</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Feature</th><th>Config knob</th><th>Detail</th></tr>
+    <tr><td>ACL (IP/CIDR allow-deny)</td><td><code>POLYWIRE_ACL_RULES</code></td><td>§3.1</td></tr>
+    <tr><td>PPv2 / X-Forwarded-For</td><td><code>POLYWIRE_ACL_PPV2_ENABLED</code>, <code>POLYWIRE_ACL_TRUSTED_PROXIES</code></td><td>§3.1</td></tr>
+    <tr><td>SQL Firewall</td><td><code>polywire_firewall_rules</code> table</td><td>§3.3</td></tr>
+    <tr><td>Backend-poisoning allowlist</td><td><code>POLYWIRE_TRUSTED_BACKEND_HOSTS</code></td><td>§3.2</td></tr>
+    <tr><td>OAuth2 / OIDC bearer auth</td><td><code>POLYWIRE_OAUTH_ISSUER</code>, <code>POLYWIRE_OAUTH_AUDIENCE</code></td><td>§3.4</td></tr>
+    <tr><td>AWS SigV4 verification</td><td><code>POLYWIRE_AWS_IAM_CREDENTIALS</code></td><td>§3.4</td></tr>
+    <tr><td>TLS listeners</td><td>shared keystore config</td><td>§3.5</td></tr>
+  </table></div>
+
+  <h3>8.4 Configuration &amp; operations features</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Feature</th><th>Detail</th></tr>
+    <tr><td>Dual config source</td><td>Every setting readable from an env var or <code>polywire_config</code></td></tr>
+    <tr><td>Hot reload</td><td><code>LISTEN/NOTIFY</code> on config and firewall-rule changes — no restart</td></tr>
+    <tr><td>Config-primary designation</td><td><code>POLYWIRE_PG_*</code> — §2</td></tr>
+    <tr><td>Config-primary HA failover</td><td><code>POLYWIRE_PG_STANDBY_HOST</code>/<code>_PORT</code> — §4.1</td></tr>
+    <tr><td>Backend registry</td><td><code>POLYWIRE_BACKENDS</code></td></tr>
+    <tr><td>Sharding / scatter-gather</td><td><code>POLYWIRE_SHARD_BACKENDS</code> — §4.2</td></tr>
+    <tr><td>Translation cache</td><td><code>polywire_translation_cache</code></td></tr>
+    <tr><td>Failed-statement log</td><td><code>polywire_failed_statements</code></td></tr>
+  </table></div>
+
+  <h3>8.5 MCP (AI agent tool access)</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Feature</th><th>Detail</th></tr>
+    <tr><td>Generic SQL tools</td><td><code>execute_sql</code>, <code>list_tables</code>, <code>describe_table</code></td></tr>
+    <tr><td>Registered stored-procedure tools</td><td><code>POLYWIRE_MCP_TOOLS</code> — only explicitly-registered functions are callable, not arbitrary SQL</td></tr>
+    <tr><td>Automatic input-schema generation</td><td>Introspects real Postgres parameter types into JSON Schema</td></tr>
+    <tr><td>OUT-parameter handling</td><td>Correctly excluded from the callable input schema</td></tr>
+    <tr><td>JSON Streamable HTTP transport</td><td>Standard MCP transport</td></tr>
+  </table></div>
+</section>
+
+<section id="matrix">
+  <h2><span class="section-num">9</span>Use case matrix</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Scenario</th><th>Feature</th><th>Notes</th></tr>
+    <tr><td>Keep a legacy Oracle-driver app running against Postgres, permanently</td><td>orawire</td><td>No app rewrite; TNS/TTC + TCPS supported</td></tr>
+    <tr><td>Cut over a MySQL-protocol app during a migration window</td><td>mywire</td><td>Temporary bridge, decommission after cutover</td></tr>
+    <tr><td>Let an AI agent call vetted stored procedures as tools</td><td>MCP frontend</td><td>Only registered functions are exposed</td></tr>
+    <tr><td>Enforce "no bulk deletes from orders" org-wide, DBA-editable, no redeploy</td><td>SQL Firewall</td><td>Rule lives in Postgres, hot-reloaded</td></tr>
+    <tr><td>Multi-region app needing Okta-based access control on a DynamoDB-protocol endpoint</td><td>dynamowire + OAuth</td><td>SigV4 or OIDC bearer</td></tr>
+    <tr><td>Horizontally shard reads across N Postgres backends</td><td>shard group + RouterStage</td><td>Scatter-gather</td></tr>
+    <tr><td>Restrict which IPs/subnets can even open a connection</td><td>ACL + PPv2</td><td>Trusted-proxy-aware</td></tr>
+    <tr><td>Stop config-table write access from becoming a routing-hijack vector</td><td><code>POLYWIRE_TRUSTED_BACKEND_HOSTS</code></td><td>Env-var-only allowlist</td></tr>
+    <tr><td>Try PolyWire locally before committing to infrastructure</td><td>Docker Compose</td><td>See §5</td></tr>
+  </table></div>
+</section>
+
+</div>
+
+<footer>
+  <p>PolyWire — <a href="https://github.com/polygres26/Wire">source</a> ·
+  <a href="https://github.com/polygres26/Docker">Docker packaging</a></p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default',
+    securityLevel: 'loose'
+  });
+</script>
+</body>
+</html>
